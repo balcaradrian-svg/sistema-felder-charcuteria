@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión - Felder Charcutería</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#d32f2f">
+    
+    <!-- Google Maps API - REEMPLAZAR YOUR_API_KEY -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDlBbb2XyTyf6UaRNnt0YfV2-PDuHsT4I0&libraries=places,geometry&callback=initMaps"></script>
+    
+    <!-- Firebase SDK (Opcional - para sincronización en la nube) -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Pantalla de Login -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-header">
+            <h1>🥩 Sistema de Gestión</h1>
+            <p>Felder Charcutería y Carnicería</p>
+        </div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Usuario</label>
+                <select id="username" required>
+                    <option value="">Seleccionar usuario</option>
+                    <option value="admin">Administrador</option>
+                    <option value="vendedor1">Vendedor 1</option>
+                    <option value="vendedor2">Vendedor 2</option>
+                    <option value="vendedor3">Vendedor 3</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" required placeholder="Ingrese su contraseña">
+            </div>
+
+            <button type="submit" class="btn" style="width: 100%;">Iniciar Sesión</button>
+        </form>
+
+        <!-- REMOVIDO: Los usuarios y contraseñas no deben ser visibles -->
+    </div>
+
+    <!-- Sistema Principal -->
+    <div id="mainSystem" style="display: none;">
+        <div class="container">
+            <div class="header">
+                <div class="header-left">
+                    <h1>🥩 Sistema de Gestión - Felder Charcutería</h1>
+                    <p>Gestión de Clientes y Pedidos con Reparto Optimizado</p>
+                </div>
+                <div class="user-info">
+                    <div class="user-name" id="currentUserName">Usuario</div>
+                    <div class="user-role" id="currentUserRole">Rol</div>
+                    <div id="firebase-status" style="font-size: 0.8em; margin: 5px 0;">🟡 Verificando conexión...</div>
+                    <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('registro')">➕ Registrar Cliente</button>
+                <button class="tab" onclick="showTab('buscar')">🔍 Buscar Clientes</button>
+                <button class="tab" onclick="showTab('listar')">📋 Lista de Clientes</button>
+                <button class="tab" onclick="showTab('pedidos')">🛒 Crear Pedido</button>
+                <button class="tab" onclick="showTab('verPedidos')">📦 Ver Pedidos</button>
+                <button class="tab" onclick="showTab('reparto')">🚛 Organizar Reparto</button>
+                <button class="tab" id="statsTab" onclick="showTab('estadisticas')" style="display: none;">📊 Estadísticas</button>
+                <button class="tab" id="configTab" onclick="showTab('configuracion')" style="display: none;">⚙️ Configuración</button>
+            </div>
+
+            <!-- Tab Registro de Cliente -->
+            <div id="registro" class="content">
+                <h2>Registrar Nuevo Cliente</h2>
+                
+                <div class="success-message" id="successMessage">
+                    ✅ Cliente registrado exitosamente
+                </div>
+                
+                <div class="error-message" id="errorMessage">
+                    ❌ Error: Por favor complete todos los campos obligatorios
+                </div>
+
+                <form id="clientForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="nombreFicticio">Nombre Ficticio <span class="required">*</span></label>
+                            <input type="text" id="nombreFicticio" required placeholder="Ej: Parrilla El Asador" style="text-transform: none;">
+                        </div>
+                        <div class="form-group">
+                            <label for="razonSocial">Razón Social <span class="required">*</span></label>
+                            <input type="text" id="razonSocial" required placeholder="Ej: El Asador S.R.L." style="text-transform: none;">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cuit">CUIT <span class="required">*</span></label>
+                            <input type="text" id="cuit" required placeholder="20-12345678-9" maxlength="13">
+                        </div>
+                        <div class="form-group">
+                            <label for="telefono">Teléfono <span class="required">*</span></label>
+                            <input type="tel" id="telefono" required placeholder="343 123-4567">
+                        </div>
+                    </div>
+
+                    <div class="form-row single">
+                        <div class="form-group">
+                            <label for="direccion">Dirección Completa <span class="required">*</span></label>
+                            <input type="text" id="direccion" required placeholder="Av. Almafuerte 1234, Paraná, Entre Ríos" style="text-transform: none;">
+                            <button type="button" class="btn-map" onclick="toggleMapSelector()">
+                                📍 Seleccionar en el Mapa
+                            </button>
+                            <div id="map-selector-instructions" class="map-instructions" style="display: none;">
+                                <strong>🎯 Modo de selección activo:</strong><br>
+                                • Haz clic en cualquier punto del mapa para colocar el marcador<br>
+                                • Puedes arrastrar el marcador para ajustar la ubicación<br>
+                                • La dirección se completará automáticamente
+                            </div>
+                            <div id="map-container-cliente" style="height: 300px; margin-top: 10px; border-radius: 5px; display: none;"></div>
+                            <div id="coordenadas-info" style="margin-top: 5px; font-size: 0.9em; color: #666; display: none;"></div>
+                            <div id="map-container-cliente" style="height: 300px; margin-top: 10px; border-radius: 5px; display: none;"></div>
+                            <div id="coordenadas-info" style="margin-top: 5px; font-size: 0.9em; color: #666; display: none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" placeholder="cliente@ejemplo.com" style="text-transform: none;">
+                        </div>
+                        <div class="form-group">
+                            <label for="vendedor">Vendedor Asignado <span class="required">*</span></label>
+                            <select id="vendedor" required>
+                                <option value="">Seleccionar vendedor</option>
+                                <option value="Vendedor 1">Vendedor 1</option>
+                                <option value="Vendedor 2">Vendedor 2</option>
+                                <option value="Vendedor 3">Vendedor 3</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="potencialidad">Potencialidad del Cliente <span class="required">*</span></label>
+                            <select id="potencialidad" required>
+                                <option value="">Seleccionar potencialidad</option>
+                                <option value="Alto">Alto</option>
+                                <option value="Medio">Medio</option>
+                                <option value="Bajo">Bajo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row single">
+                        <div class="form-group">
+                            <label for="notas">Notas Adicionales</label>
+                            <textarea id="notas" rows="3" placeholder="Información adicional sobre el cliente..." style="text-transform: none;"></textarea>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn">Registrar Cliente</button>
+                    <button type="reset" class="btn btn-secondary">Limpiar Formulario</button>
+                </form>
+            </div>
+
+            <!-- Tab Buscar Clientes -->
+            <div id="buscar" class="content" style="display: none;">
+                <h2>Buscar Clientes</h2>
+                
+                <div class="permission-notice" id="vendedorNotice" style="display: none;">
+                    ℹ️ Como vendedor, tienes acceso de solo lectura a toda la base de datos de clientes. Solo los administradores pueden editar o eliminar clientes.
+                </div>
+                
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="🔍 Buscar por nombre, razón social, CUIT o teléfono...">
+                </div>
+
+                <div class="filters">
+                    <div class="form-group">
+                        <label for="filterVendedor">Filtrar por Vendedor</label>
+                        <select id="filterVendedor">
+                            <option value="">Todos los vendedores</option>
+                            <option value="Vendedor 1">Vendedor 1</option>
+                            <option value="Vendedor 2">Vendedor 2</option>
+                            <option value="Vendedor 3">Vendedor 3</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filterPotencial">Filtrar por Potencialidad</label>
+                        <select id="filterPotencial">
+                            <option value="">Todas las potencialidades</option>
+                            <option value="Alto">Alto</option>
+                            <option value="Medio">Medio</option>
+                            <option value="Bajo">Bajo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="searchResults"></div>
+            </div>
+
+            <!-- Tab Lista de Clientes -->
+            <div id="listar" class="content" style="display: none;">
+                <h2>Lista Completa de Clientes</h2>
+                <div class="permission-notice" id="vendedorNotice2" style="display: none;">
+                    ℹ️ Como vendedor, tienes acceso de solo lectura a toda la base de datos de clientes. Solo los administradores pueden editar o eliminar clientes.
+                </div>
+                <div id="clientList"></div>
+            </div>
+
+            <!-- Tab Crear Pedido -->
+            <div id="pedidos" class="content" style="display: none;">
+                <h2>Crear Nuevo Pedido</h2>
+                
+                <div class="success-message" id="pedidoSuccessMessage">
+                    ✅ Pedido creado exitosamente
+                </div>
+                
+                <div class="error-message" id="pedidoErrorMessage">
+                    ❌ Error: Por favor complete todos los campos obligatorios
+                </div>
+
+                <form id="pedidoForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="clientePedido">Cliente <span class="required">*</span></label>
+                            <select id="clientePedido" required onchange="loadClientInfo()">
+                                <option value="">Seleccionar cliente</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fechaEntrega">Fecha de Entrega <span class="required">*</span></label>
+                            <select id="fechaEntrega" required>
+                                <option value="">Seleccionar fecha de entrega</option>
+                            </select>
+                            <small style="color: #666; margin-top: 5px; display: block;">Solo se permiten entregas los martes y viernes</small>
+                        </div>
+                    </div>
+
+                    <div id="clienteInfo" style="display: none; background: #f8f8f8; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                        <h4>Información del Cliente:</h4>
+                        <div id="clienteInfoContent"></div>
+                    </div>
+
+                    <h3>Productos del Pedido</h3>
+                    <div id="productosContainer">
+                        <div class="producto-item">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Categoría <span class="required">*</span></label>
+                                    <select class="categoria-select" onchange="loadSubcategorias(this)" required>
+                                        <option value="">Seleccionar categoría</option>
+                                        <option value="salazones">Salazones</option>
+                                        <option value="fermentados">Fermentados</option>
+                                        <option value="embutidos">Embutidos</option>
+                                        <option value="fiambres">Fiambres de músculo entero</option>
+                                        <option value="frescos">Frescos Cerdo</option>
+                                        <option value="elaborados">Otros Elaborados</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Producto <span class="required">*</span></label>
+                                    <select class="producto-select" onchange="loadProductInfo(this)" required>
+                                        <option value="">Seleccionar producto</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Cantidad <span class="required">*</span></label>
+                                    <input type="number" class="cantidad-input" min="0.1" step="0.1" required onchange="calculateSubtotal(this)">
+                                </div>
+                                <div class="form-group">
+                                    <label>Unidad</label>
+                                    <input type="text" class="unidad-input" readonly>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Precio Unitario</label>
+                                    <input type="number" class="precio-input" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label>Subtotal</label>
+                                    <input type="number" class="subtotal-input" readonly>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <button type="button" class="btn btn-secondary btn-small" onclick="removeProducto(this)">Quitar Producto</button>
+                            </div>
+                            <hr style="margin: 20px 0;">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary" onclick="addProducto()">➕ Agregar Producto</button>
+
+                    <div style="margin: 20px 0; padding: 15px; background: #f0f0f0; border-radius: 5px;">
+                        <h3>Total del Pedido: $<span id="totalPedido">0</span></h3>
+                    </div>
+
+                    <div class="form-row single">
+                        <div class="form-group">
+                            <label for="observaciones">Observaciones</label>
+                            <textarea id="observaciones" rows="3" placeholder="Observaciones especiales del pedido..." style="text-transform: none;"></textarea>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn">Crear Pedido</button>
+                    <button type="reset" class="btn btn-secondary">Limpiar Formulario</button>
+                </form>
+            </div>
+
+            <!-- Tab Ver Pedidos -->
+            <div id="verPedidos" class="content" style="display: none;">
+                <h2>Gestión de Pedidos</h2>
+                
+                <div class="filters">
+                    <div class="form-group">
+                        <label for="filterFecha">Filtrar por Fecha</label>
+                        <input type="date" id="filterFecha" onchange="filterPedidos()">
+                    </div>
+                    <div class="form-group">
+                        <label for="filterVendedorPedido">Filtrar por Vendedor</label>
+                        <select id="filterVendedorPedido" onchange="filterPedidos()">
+                            <option value="">Todos los vendedores</option>
+                            <option value="Vendedor 1">Vendedor 1</option>
+                            <option value="Vendedor 2">Vendedor 2</option>
+                            <option value="Vendedor 3">Vendedor 3</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filterEstado">Filtrar por Estado</label>
+                        <select id="filterEstado" onchange="filterPedidos()">
+                            <option value="">Todos los estados</option>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="Preparando">Preparando</option>
+                            <option value="Listo">Listo para entrega</option>
+                            <option value="Entregado">Entregado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="pedidosList"></div>
+            </div>
+
+            <!-- Tab Organizar Reparto -->
+            <div id="reparto" class="content" style="display: none;">
+                <h2>🚛 Organización de Reparto</h2>
+                
+                <div class="reparto-info">
+                    <div class="info-card">
+                        <h3>📍 Base de Operaciones</h3>
+                        <p><strong>Felder Charcutería y Carnicería</strong><br>
+                        Av. Almafuerte 5550, Paraná, Entre Ríos</p>
+                        <div id="map-container-base" style="height: 150px; margin-top: 10px; border-radius: 5px;"></div>
+                    </div>
+                    <div class="info-card">
+                        <h3>📅 Días de Reparto</h3>
+                        <p>Martes y Viernes</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>🚛 Capacidad</h3>
+                        <p>1 vehículo - Límite: 500kg</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>🗺️ Zonas de Entrega</h3>
+                        <p>Paraná, San Benito, Colonia Avellaneda</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fechaReparto">Fecha de Reparto</label>
+                        <select id="fechaReparto" onchange="loadPedidosForReparto()">
+                            <option value="">Seleccionar fecha</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="tipoOrganizacion">Organizar por</label>
+                        <select id="tipoOrganizacion" onchange="organizarReparto()">
+                            <option value="">Seleccionar criterio</option>
+                            <option value="optimizada">🎯 Ruta Optimizada (Recomendado)</option>
+                            <option value="distancia">📏 Distancia desde base</option>
+                            <option value="zona">🗺️ Zona geográfica</option>
+                            <option value="peso">⚖️ Peso del pedido</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="resumenReparto" style="display: none;">
+                    <h3>📊 Resumen del Reparto</h3>
+                    <div id="resumenContent"></div>
+                </div>
+
+                <div id="rutaOptimizada" style="display: none;">
+                    <h3>📍 Ruta Optimizada</h3>
+                    <div id="map-container-reparto" style="height: 400px; margin: 20px 0; border-radius: 5px;"></div>
+                    <div id="hojaRuta">
+                        <h4>📋 Hoja de Ruta</h4>
+                        <div id="rutaDetallada"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Estadísticas (Solo Admin) -->
+            <div id="estadisticas" class="content" style="display: none;">
+                <h2>📊 Estadísticas del Sistema</h2>
+                <div id="statsContent"></div>
+            </div>
+
+            <!-- Tab Configuración (Solo Admin) -->
+            <div id="configuracion" class="content" style="display: none;">
+                <h2>⚙️ Configuración del Sistema</h2>
+                <div id="configContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts - ORDEN CORREGIDO -->
+    <script src="data.js"></script>              <!-- PRIMERO: datos base -->
+    <script src="app.js"></script>               <!-- SEGUNDO: lógica principal -->
+    <script src="maps.js"></script>              <!-- TERCERO: Google Maps -->
+    <script src="clients.js"></script>           <!-- CUARTO: gestión clientes -->
+    <script src="orders.js"></script>            <!-- QUINTO: sistema pedidos -->
+    <script src="delivery.js"></script>          <!-- SEXTO: reparto -->
+    <script src="config.js"></script>            <!-- SÉPTIMO: configuración -->
+    <script src="backup.js"></script>            <!-- OCTAVO: respaldo -->
+    <script src="firebase-config.js"></script>   <!-- ÚLTIMO: Firebase opcional -->
+</body>
+</html>
