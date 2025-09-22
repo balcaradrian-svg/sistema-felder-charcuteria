@@ -25,7 +25,7 @@ let systemConfig = {
 Tu pedido #{numero} ha sido confirmado.
 
 📅 Fecha de entrega: {fecha}
-💰 Total: ${total}
+💰 Total: \${total}
 
 Productos:
 {productos}
@@ -38,7 +38,7 @@ Productos:
 // CARGA DE CONFIGURACIÓN
 // ============================================
 function loadConfiguracion() {
-    if (currentUser?.rol !== 'admin') {
+    if (window.currentUser?.rol !== 'admin') {
         document.getElementById('configContent').innerHTML = `
             <div class="permission-notice">
                 ⚠️ Solo los administradores pueden acceder a la configuración del sistema.
@@ -80,7 +80,7 @@ function createConfigInterface() {
                     <p>Productos registrados: <strong>${Object.values(window.productData).flat().length}</strong></p>
                     <p>Categorías: <strong>${Object.keys(window.productData).length}</strong></p>
                     <div style="margin-top: 15px;">
-                        <button class="btn btn-secondary" onclick="showProductManager()">📝 Administrar Productos</button>
+                        <button class="btn btn-secondary" onclick="showProductManager()">🔍 Administrar Productos</button>
                         <button class="btn btn-secondary" onclick="exportCatalog()">📄 Exportar Catálogo</button>
                         <button class="btn btn-secondary" onclick="importCatalog()">📁 Importar Catálogo</button>
                     </div>
@@ -196,15 +196,15 @@ function createConfigInterface() {
                     <p>Última actualización: <strong id="lastUpdateTime">${new Date().toLocaleString('es-AR')}</strong></p>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
                         <div class="stat-card">
-                            <div class="stat-number">${clientes.length}</div>
+                            <div class="stat-number">${window.clientes.length}</div>
                             <div class="stat-label">Clientes</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number">${pedidos.length}</div>
+                            <div class="stat-number">${window.pedidos.length}</div>
                             <div class="stat-label">Pedidos</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number">${Object.keys(usuarios).length}</div>
+                            <div class="stat-number">${Object.keys(window.usuarios).length}</div>
                             <div class="stat-label">Usuarios</div>
                         </div>
                     </div>
@@ -239,7 +239,7 @@ function createConfigInterface() {
                         <button class="btn btn-secondary" onclick="forceFirebaseSync()">⚡ Forzar Sincronización</button>
                     </div>
                     <div style="margin-top: 15px; padding: 15px; background: #fff3cd; border-radius: 5px; color: #856404;">
-                        <strong>💡 Nota:</strong> Para usar Firebase, configure sus credenciales en <code>firebase-config.js</code>
+                        <strong>💡 Nota:</strong> Para usar Firebase, configure sus credenciales en <code>firebase.js</code>
                     </div>
                 </div>
             </div>
@@ -253,10 +253,10 @@ function createConfigInterface() {
 function createVendedoresList() {
     let html = '';
     
-    Object.entries(usuarios).forEach(([username, user]) => {
+    Object.entries(window.usuarios).forEach(([username, user]) => {
         if (user.rol === 'vendedor') {
-            const clientesAsignados = clientes.filter(c => c.vendedor === user.vendedor).length;
-            const pedidosRealizados = pedidos.filter(p => p.vendedorAsignado === user.vendedor).length;
+            const clientesAsignados = window.clientes.filter(c => c.vendedor === user.vendedor).length;
+            const pedidosRealizados = window.pedidos.filter(p => p.vendedorAsignado === user.vendedor).length;
             
             html += `
                 <div class="vendedor-item">
@@ -316,13 +316,13 @@ function saveNewVendedor() {
         return;
     }
     
-    if (usuarios[username]) {
+    if (window.usuarios[username]) {
         alert('Ya existe un usuario con ese nombre');
         return;
     }
     
     // Agregar nuevo vendedor
-    usuarios[username] = {
+    window.usuarios[username] = {
         password: password,
         nombre: nombre,
         rol: 'vendedor',
@@ -341,11 +341,33 @@ function closeVendedorForm() {
     if (overlay) overlay.remove();
 }
 
-function deleteVendedor(username) {
-    const vendedor = usuarios[username];
+function editVendedor(username) {
+    const vendedor = window.usuarios[username];
     if (!vendedor) return;
     
-    const clientesAsignados = clientes.filter(c => c.vendedor === vendedor.vendedor).length;
+    const newName = prompt('Nuevo nombre del vendedor:', vendedor.nombre);
+    if (newName && newName.trim()) {
+        vendedor.nombre = newName.trim();
+        vendedor.vendedor = newName.trim();
+        
+        // Actualizar clientes asignados
+        window.clientes.forEach(cliente => {
+            if (cliente.vendedor === vendedor.vendedor) {
+                cliente.vendedor = newName.trim();
+            }
+        });
+        
+        saveData();
+        loadConfiguracion();
+        showSuccess(`Vendedor actualizado a: ${newName}`);
+    }
+}
+
+function deleteVendedor(username) {
+    const vendedor = window.usuarios[username];
+    if (!vendedor) return;
+    
+    const clientesAsignados = window.clientes.filter(c => c.vendedor === vendedor.vendedor).length;
     
     let confirmMessage = `¿Está seguro de eliminar al vendedor "${vendedor.nombre}"?`;
     if (clientesAsignados > 0) {
@@ -353,7 +375,7 @@ function deleteVendedor(username) {
     }
     
     if (confirm(confirmMessage)) {
-        delete usuarios[username];
+        delete window.usuarios[username];
         saveData();
         loadConfiguracion();
         showSuccess(`Vendedor "${vendedor.nombre}" eliminado exitosamente`);
@@ -391,7 +413,9 @@ function saveRepartoConfig() {
     localStorage.setItem('felder_system_config', JSON.stringify(systemConfig));
     
     // Regenerar fechas de entrega con nueva configuración
-    generateDeliveryDates();
+    if (typeof generateDeliveryDates === 'function') {
+        generateDeliveryDates();
+    }
     
     showSuccess('Configuración de reparto guardada exitosamente');
 }
@@ -406,15 +430,44 @@ function saveWhatsappConfig() {
     showSuccess('Configuración de WhatsApp guardada exitosamente');
 }
 
+function testWhatsappMessage() {
+    const mensaje = document.getElementById('whatsappMensaje').value;
+    const numero = document.getElementById('whatsappNumero').value;
+    
+    // Datos de prueba
+    const datosTest = {
+        cliente: 'Cliente de Prueba',
+        numero: 'TEST001',
+        fecha: new Date().toLocaleDateString('es-AR'),
+        total: '$12,500',
+        productos: '• Bondiola - 2 kg\n• Salame Tradicional - 1 kg'
+    };
+    
+    // Reemplazar variables
+    let mensajeFinal = mensaje;
+    Object.entries(datosTest).forEach(([key, value]) => {
+        mensajeFinal = mensajeFinal.replace(new RegExp(`{${key}}`, 'g'), value);
+    });
+    
+    // Mostrar preview
+    alert(`Vista previa del mensaje:\n\n${mensajeFinal}`);
+    
+    // Opción de enviar de prueba
+    if (confirm('¿Enviar mensaje de prueba a WhatsApp?')) {
+        const whatsappUrl = `https://wa.me/${numero}?text=${encodeURIComponent(mensajeFinal)}`;
+        window.open(whatsappUrl, '_blank');
+    }
+}
+
 // ============================================
 // RESPALDO Y RESTAURACIÓN
 // ============================================
 function exportFullBackup() {
     try {
         const backupData = {
-            clientes: clientes,
-            pedidos: pedidos,
-            usuarios: usuarios,
+            clientes: window.clientes,
+            pedidos: window.pedidos,
+            usuarios: window.usuarios,
             systemConfig: systemConfig,
             productData: window.productData,
             timestamp: new Date().toISOString(),
@@ -453,9 +506,9 @@ function importBackup() {
                 
                 if (confirm('¿Está seguro de restaurar este respaldo? Esto sobrescribirá todos los datos actuales.')) {
                     // Restaurar datos
-                    if (backupData.clientes) clientes = backupData.clientes;
-                    if (backupData.pedidos) pedidos = backupData.pedidos;
-                    if (backupData.usuarios) usuarios = backupData.usuarios;
+                    if (backupData.clientes) window.clientes = backupData.clientes;
+                    if (backupData.pedidos) window.pedidos = backupData.pedidos;
+                    if (backupData.usuarios) window.usuarios = backupData.usuarios;
                     if (backupData.systemConfig) systemConfig = backupData.systemConfig;
                     if (backupData.productData) window.productData = backupData.productData;
                     
@@ -488,6 +541,292 @@ function clearAllData() {
 }
 
 // ============================================
+// PRODUCTOS MANAGEMENT
+// ============================================
+function showProductManager() {
+    const productManagerHtml = `
+        <div id="productManagerOverlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto; padding: 20px;">
+            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 1000px; margin: 20px auto;">
+                <h2>🔍 Administrador de Productos</h2>
+                
+                <div style="margin: 20px 0;">
+                    <button class="btn btn-secondary" onclick="addNewProduct()">➕ Agregar Producto</button>
+                    <button class="btn btn-secondary" onclick="bulkEditPrices()">💰 Editar Precios Masivo</button>
+                    <button class="btn btn-secondary" onclick="closeProductManager()">❌ Cerrar</button>
+                </div>
+                
+                <div id="productManagerContent">
+                    ${createProductManagerContent()}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', productManagerHtml);
+}
+
+function createProductManagerContent() {
+    let html = '';
+    
+    Object.entries(window.productData).forEach(([categoria, productos]) => {
+        html += `
+            <div style="margin-bottom: 30px;">
+                <h3 style="color: #d32f2f; margin-bottom: 15px;">${categoria.toUpperCase()}</h3>
+                <div style="display: grid; gap: 10px;">
+                ${productos.map(producto => `
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; align-items: center; padding: 10px; background: #f8f8f8; border-radius: 5px;">
+                        <input type="text" value="${producto.nombre}" onchange="updateProductName('${categoria}', '${producto.nombre}', this.value)" style="padding: 5px;">
+                        <input type="number" value="${producto.precio}" onchange="updateProductPrice('${categoria}', '${producto.nombre}', this.value)" style="padding: 5px;">
+                        <input type="text" value="${producto.unidad}" onchange="updateProductUnit('${categoria}', '${producto.nombre}', this.value)" style="padding: 5px;">
+                        <input type="text" value="${producto.presentacion || ''}" onchange="updateProductPresentation('${categoria}', '${producto.nombre}', this.value)" style="padding: 5px;">
+                        <button class="btn btn-small" onclick="deleteProduct('${categoria}', '${producto.nombre}')" style="background: #f44336;">🗑️</button>
+                    </div>
+                `).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    return html;
+}
+
+function closeProductManager() {
+    const overlay = document.getElementById('productManagerOverlay');
+    if (overlay) overlay.remove();
+}
+
+function addNewProduct() {
+    const categoria = prompt('Categoría (salazones, fermentados, embutidos, fiambres, frescos, elaborados):');
+    if (!categoria || !window.productData[categoria]) {
+        alert('Categoría inválida');
+        return;
+    }
+    
+    const nombre = prompt('Nombre del producto:');
+    if (!nombre) return;
+    
+    const precio = prompt('Precio:');
+    if (!precio || isNaN(parseFloat(precio))) {
+        alert('Precio inválido');
+        return;
+    }
+    
+    const unidad = prompt('Unidad (kg, unidad, etc.):') || 'kg';
+    const presentacion = prompt('Presentación:') || '';
+    
+    const nuevoProducto = {
+        nombre: nombre,
+        precio: parseFloat(precio),
+        unidad: unidad,
+        presentacion: presentacion,
+        categoria: categoria
+    };
+    
+    window.productData[categoria].push(nuevoProducto);
+    saveProductData();
+    
+    // Recargar interfaz
+    const content = document.getElementById('productManagerContent');
+    if (content) {
+        content.innerHTML = createProductManagerContent();
+    }
+    
+    showSuccess(`Producto "${nombre}" agregado exitosamente`);
+}
+
+function updateProductName(categoria, oldName, newName) {
+    if (!newName.trim()) return;
+    
+    const productos = window.productData[categoria];
+    const producto = productos.find(p => p.nombre === oldName);
+    if (producto) {
+        producto.nombre = newName;
+        saveProductData();
+    }
+}
+
+function updateProductPrice(categoria, nombre, newPrice) {
+    const precio = parseFloat(newPrice);
+    if (isNaN(precio) || precio < 0) return;
+    
+    const productos = window.productData[categoria];
+    const producto = productos.find(p => p.nombre === nombre);
+    if (producto) {
+        producto.precio = precio;
+        saveProductData();
+    }
+}
+
+function updateProductUnit(categoria, nombre, newUnit) {
+    if (!newUnit.trim()) return;
+    
+    const productos = window.productData[categoria];
+    const producto = productos.find(p => p.nombre === nombre);
+    if (producto) {
+        producto.unidad = newUnit;
+        saveProductData();
+    }
+}
+
+function updateProductPresentation(categoria, nombre, newPresentation) {
+    const productos = window.productData[categoria];
+    const producto = productos.find(p => p.nombre === nombre);
+    if (producto) {
+        producto.presentacion = newPresentation;
+        saveProductData();
+    }
+}
+
+function deleteProduct(categoria, nombre) {
+    if (confirm(`¿Eliminar el producto "${nombre}"?`)) {
+        window.productData[categoria] = window.productData[categoria].filter(p => p.nombre !== nombre);
+        saveProductData();
+        
+        // Recargar interfaz
+        document.getElementById('productManagerContent').innerHTML = createProductManagerContent();
+    }
+}
+
+function bulkEditPrices() {
+    const percentage = prompt('Ingrese el porcentaje de ajuste (ej: 10 para aumentar 10%, -5 para reducir 5%):');
+    if (!percentage) return;
+    
+    const factor = 1 + (parseFloat(percentage) / 100);
+    if (isNaN(factor)) {
+        alert('Porcentaje inválido');
+        return;
+    }
+    
+    if (confirm(`¿Aplicar ${percentage}% de ajuste a TODOS los productos?`)) {
+        let productosActualizados = 0;
+        
+        Object.values(window.productData).forEach(productos => {
+            productos.forEach(producto => {
+                const nuevoPrecio = Math.round(producto.precio * factor);
+                if (nuevoPrecio > 0) {
+                    producto.precio = nuevoPrecio;
+                    productosActualizados++;
+                }
+            });
+        });
+        
+        saveProductData();
+        showSuccess(`${productosActualizados} productos actualizados con ${percentage}% de ajuste`);
+        
+        // Recargar interfaz si está abierta
+        const content = document.getElementById('productManagerContent');
+        if (content) {
+            content.innerHTML = createProductManagerContent();
+        }
+    }
+}
+
+function saveProductData() {
+    localStorage.setItem('felder_product_data', JSON.stringify(window.productData));
+    showSuccess('Productos actualizados exitosamente');
+}
+
+function exportCatalog() {
+    try {
+        const catalogData = {
+            productos: window.productData,
+            empresa: systemConfig.empresa,
+            timestamp: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        const dataStr = JSON.stringify(catalogData, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        
+        const exportFileDefaultName = `felder-catalogo-${new Date().toISOString().split('T')[0]}.json`;
+        
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+        
+        showSuccess('Catálogo exportado exitosamente');
+    } catch (error) {
+        showError('Error al exportar catálogo: ' + error.message);
+    }
+}
+
+function importCatalog() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const catalogData = JSON.parse(e.target.result);
+                
+                if (confirm('¿Importar este catálogo? Esto sobrescribirá el catálogo actual.')) {
+                    if (catalogData.productos) {
+                        window.productData = catalogData.productos;
+                        saveProductData();
+                        showSuccess('Catálogo importado exitosamente');
+                    }
+                }
+            } catch (error) {
+                showError('Error al importar catálogo: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    
+    input.click();
+}
+
+function exportVendedoresReport() {
+    const reportData = [];
+    
+    Object.entries(window.usuarios).forEach(([username, user]) => {
+        if (user.rol === 'vendedor') {
+            const clientesAsignados = window.clientes.filter(c => c.vendedor === user.vendedor);
+            const pedidosRealizados = window.pedidos.filter(p => p.vendedorAsignado === user.vendedor);
+            const montoTotal = pedidosRealizados.reduce((sum, p) => sum + p.total, 0);
+            
+            reportData.push({
+                usuario: username,
+                nombre: user.nombre,
+                clientesAsignados: clientesAsignados.length,
+                pedidosRealizados: pedidosRealizados.length,
+                montoTotal: montoTotal,
+                promedioMensual: montoTotal / Math.max(1, new Date().getMonth() + 1)
+            });
+        }
+    });
+    
+    // Crear CSV
+    const csvContent = [
+        ['Usuario', 'Nombre', 'Clientes', 'Pedidos', 'Monto Total', 'Promedio Mensual'],
+        ...reportData.map(row => [
+            row.usuario,
+            row.nombre,
+            row.clientesAsignados,
+            row.pedidosRealizados,
+            row.montoTotal,
+            row.promedioMensual.toFixed(2)
+        ])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-vendedores-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+    
+    showSuccess('Reporte de vendedores exportado exitosamente');
+}
+
+// ============================================
 // CARGAR CONFIGURACIÓN GUARDADA
 // ============================================
 function loadSavedConfig() {
@@ -505,7 +844,7 @@ function loadSavedConfig() {
 // ESTADÍSTICAS DEL SISTEMA
 // ============================================
 function loadEstadisticas() {
-    if (currentUser?.rol !== 'admin') {
+    if (window.currentUser?.rol !== 'admin') {
         document.getElementById('statsContent').innerHTML = `
             <div class="permission-notice">
                 ⚠️ Solo los administradores pueden acceder a las estadísticas del sistema.
@@ -519,17 +858,17 @@ function loadEstadisticas() {
 }
 
 function createStatsInterface() {
-    const totalClientes = clientes.length;
-    const totalPedidos = pedidos.length;
-    const montoTotal = pedidos.reduce((sum, p) => sum + p.total, 0);
+    const totalClientes = window.clientes.length;
+    const totalPedidos = window.pedidos.length;
+    const montoTotal = window.pedidos.reduce((sum, p) => sum + p.total, 0);
     const promedioMensual = montoTotal / Math.max(1, new Date().getMonth() + 1);
     
     // Estadísticas por vendedor
     const statsByVendedor = {};
-    Object.values(usuarios).forEach(user => {
+    Object.values(window.usuarios).forEach(user => {
         if (user.rol === 'vendedor') {
-            const clientesVendedor = clientes.filter(c => c.vendedor === user.vendedor);
-            const pedidosVendedor = pedidos.filter(p => p.vendedorAsignado === user.vendedor);
+            const clientesVendedor = window.clientes.filter(c => c.vendedor === user.vendedor);
+            const pedidosVendedor = window.pedidos.filter(p => p.vendedorAsignado === user.vendedor);
             const montoVendedor = pedidosVendedor.reduce((sum, p) => sum + p.total, 0);
             
             statsByVendedor[user.vendedor] = {
@@ -594,6 +933,19 @@ function createStatsInterface() {
 }
 
 // ============================================
+// FUNCIONES DE UTILIDAD
+// ============================================
+function showSuccess(message) {
+    alert(message); // Simplificado para evitar errores
+    console.log('Success:', message);
+}
+
+function showError(message) {
+    alert(message); // Simplificado para evitar errores
+    console.error('Error:', message);
+}
+
+// ============================================
 // INICIALIZACIÓN
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
@@ -602,350 +954,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ============================================
-// FUNCIONES ADICIONALES FALTANTES
+// EXPONER FUNCIONES GLOBALMENTE
 // ============================================
-
-// Administrar productos
-function showProductManager() {
-    const productManagerHtml = `
-        <div id="productManagerOverlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto; padding: 20px;">
-            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 1000px; margin: 20px auto;">
-                <h2>📝 Administrador de Productos</h2>
-                
-                <div style="margin: 20px 0;">
-                    <button class="btn btn-secondary" onclick="addNewProduct()">➕ Agregar Producto</button>
-                    <button class="btn btn-secondary" onclick="bulkEditPrices()">💰 Editar Precios Masivo</button>
-                    <button class="btn btn-secondary" onclick="closeProductManager()">❌ Cerrar</button>
-                </div>
-                
-                <div id="productManagerContent">
-                    ${createProductManagerContent()}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', productManagerHtml);
-}
-
-function createProductManagerContent() {
-    let html = '';
-    
-    Object.entries(window.productData).forEach(([categoria, productos]) => {
-        html += `
-            <div style="margin-bottom: 30px;">
-                <h3 style="color: #d32f2f; margin-bottom: 15px;">${categoria.toUpperCase()}</h3>
-                ${productos.map(producto => `
-                    <div class="producto-config-item">
-                        <input type="text" value="${producto.nombre}" onchange="updateProductName('${categoria}', '${producto.nombre}', this.value)">
-                        <input type="number" value="${producto.precio}" onchange="updateProductPrice('${categoria}', '${producto.nombre}', this.value)">
-                        <input type="text" value="${producto.unidad}" onchange="updateProductUnit('${categoria}', '${producto.nombre}', this.value)">
-                        <input type="text" value="${producto.presentacion}" onchange="updateProductPresentation('${categoria}', '${producto.nombre}', this.value)">
-                        <button class="btn btn-small" onclick="deleteProduct('${categoria}', '${producto.nombre}')" style="background: #f44336;">🗑️</button>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    });
-    
-    return html;
-}
-
-function updateProductName(categoria, oldName, newName) {
-    if (!newName.trim()) return;
-    
-    const productos = window.productData[categoria];
-    const producto = productos.find(p => p.nombre === oldName);
-    if (producto) {
-        producto.nombre = newName;
-        saveProductData();
-    }
-}
-
-function updateProductPrice(categoria, nombre, newPrice) {
-    const precio = parseFloat(newPrice);
-    if (isNaN(precio) || precio < 0) return;
-    
-    const productos = window.productData[categoria];
-    const producto = productos.find(p => p.nombre === nombre);
-    if (producto) {
-        producto.precio = precio;
-        saveProductData();
-    }
-}
-
-function updateProductUnit(categoria, nombre, newUnit) {
-    if (!newUnit.trim()) return;
-    
-    const productos = window.productData[categoria];
-    const producto = productos.find(p => p.nombre === nombre);
-    if (producto) {
-        producto.unidad = newUnit;
-        saveProductData();
-    }
-}
-
-function updateProductPresentation(categoria, nombre, newPresentation) {
-    const productos = window.productData[categoria];
-    const producto = productos.find(p => p.nombre === nombre);
-    if (producto) {
-        producto.presentacion = newPresentation;
-        saveProductData();
-    }
-}
-
-function deleteProduct(categoria, nombre) {
-    if (confirm(`¿Eliminar el producto "${nombre}"?`)) {
-        window.productData[categoria] = window.productData[categoria].filter(p => p.nombre !== nombre);
-        saveProductData();
-        
-        // Recargar interfaz
-        document.getElementById('productManagerContent').innerHTML = createProductManagerContent();
-    }
-}
-
-function closeProductManager() {
-    const overlay = document.getElementById('productManagerOverlay');
-    if (overlay) overlay.remove();
-}
-
-function saveProductData() {
-    localStorage.setItem('felder_product_data', JSON.stringify(window.productData));
-    showSuccess('Productos actualizados exitosamente');
-}
-
-// Exportar catálogo
-function exportCatalog() {
-    try {
-        const catalogData = {
-            productos: window.productData,
-            empresa: systemConfig.empresa,
-            timestamp: new Date().toISOString(),
-            version: '1.0'
-        };
-        
-        const dataStr = JSON.stringify(catalogData, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        
-        const exportFileDefaultName = `felder-catalogo-${new Date().toISOString().split('T')[0]}.json`;
-        
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
-        
-        showSuccess('Catálogo exportado exitosamente');
-    } catch (error) {
-        showError('Error al exportar catálogo: ' + error.message);
-    }
-}
-
-// Importar catálogo
-function importCatalog() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    
-    input.onchange = function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const catalogData = JSON.parse(e.target.result);
-                
-                if (confirm('¿Importar este catálogo? Esto sobrescribirá el catálogo actual.')) {
-                    if (catalogData.productos) {
-                        window.productData = catalogData.productos;
-                        saveProductData();
-                        showSuccess('Catálogo importado exitosamente');
-                    }
-                }
-            } catch (error) {
-                showError('Error al importar catálogo: ' + error.message);
-            }
-        };
-        reader.readAsText(file);
-    };
-    
-    input.click();
-}
-
-// Editar vendedor
-function editVendedor(username) {
-    const vendedor = usuarios[username];
-    if (!vendedor) return;
-    
-    const newName = prompt('Nuevo nombre del vendedor:', vendedor.nombre);
-    if (newName && newName.trim()) {
-        vendedor.nombre = newName.trim();
-        vendedor.vendedor = newName.trim();
-        
-        // Actualizar clientes asignados
-        clientes.forEach(cliente => {
-            if (cliente.vendedor === vendedor.vendedor) {
-                cliente.vendedor = newName.trim();
-            }
-        });
-        
-        saveData();
-        loadConfiguracion();
-        showSuccess(`Vendedor actualizado a: ${newName}`);
-    }
-}
-
-// Reporte de vendedores
-function exportVendedoresReport() {
-    const reportData = [];
-    
-    Object.entries(usuarios).forEach(([username, user]) => {
-        if (user.rol === 'vendedor') {
-            const clientesAsignados = clientes.filter(c => c.vendedor === user.vendedor);
-            const pedidosRealizados = pedidos.filter(p => p.vendedorAsignado === user.vendedor);
-            const montoTotal = pedidosRealizados.reduce((sum, p) => sum + p.total, 0);
-            
-            reportData.push({
-                usuario: username,
-                nombre: user.nombre,
-                clientesAsignados: clientesAsignados.length,
-                pedidosRealizados: pedidosRealizados.length,
-                montoTotal: montoTotal,
-                promedioMensual: montoTotal / Math.max(1, new Date().getMonth() + 1)
-            });
-        }
-    });
-    
-    // Crear CSV
-    const csvContent = [
-        ['Usuario', 'Nombre', 'Clientes', 'Pedidos', 'Monto Total', 'Promedio Mensual'],
-        ...reportData.map(row => [
-            row.usuario,
-            row.nombre,
-            row.clientesAsignados,
-            row.pedidosRealizados,
-            row.montoTotal,
-            row.promedioMensual.toFixed(2)
-        ])
-    ].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reporte-vendedores-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-    
-    showSuccess('Reporte de vendedores exportado exitosamente');
-}
-
-// Probar mensaje de WhatsApp
-function testWhatsappMessage() {
-    const mensaje = document.getElementById('whatsappMensaje').value;
-    const numero = document.getElementById('whatsappNumero').value;
-    
-    // Datos de prueba
-    const datosTest = {
-        cliente: 'Cliente de Prueba',
-        numero: 'TEST001',
-        fecha: new Date().toLocaleDateString('es-AR'),
-        total: '$12,500',
-        productos: '• Bondiola - 2 kg\n• Salame Tradicional - 1 kg'
-    };
-    
-    // Reemplazar variables
-    let mensajeFinal = mensaje;
-    Object.entries(datosTest).forEach(([key, value]) => {
-        mensajeFinal = mensajeFinal.replace(new RegExp(`{${key}}`, 'g'), value);
-    });
-    
-    // Mostrar preview
-    alert(`Vista previa del mensaje:\n\n${mensajeFinal}`);
-    
-    // Opción de enviar de prueba
-    if (confirm('¿Enviar mensaje de prueba a WhatsApp?')) {
-        const whatsappUrl = `https://wa.me/${numero}?text=${encodeURIComponent(mensajeFinal)}`;
-        window.open(whatsappUrl, '_blank');
-    }
-}
-
-// Edición masiva de precios
-function bulkEditPrices() {
-    const percentage = prompt('Ingrese el porcentaje de ajuste (ej: 10 para aumentar 10%, -5 para reducir 5%):');
-    if (!percentage) return;
-    
-    const factor = 1 + (parseFloat(percentage) / 100);
-    if (isNaN(factor)) {
-        alert('Porcentaje inválido');
-        return;
-    }
-    
-    if (confirm(`¿Aplicar ${percentage}% de ajuste a TODOS los productos?`)) {
-        let productosActualizados = 0;
-        
-        Object.values(window.productData).forEach(productos => {
-            productos.forEach(producto => {
-                const nuevoPrecio = Math.round(producto.precio * factor);
-                if (nuevoPrecio > 0) {
-                    producto.precio = nuevoPrecio;
-                    productosActualizados++;
-                }
-            });
-        });
-        
-        saveProductData();
-        showSuccess(`${productosActualizados} productos actualizados con ${percentage}% de ajuste`);
-        
-        // Recargar interfaz si está abierta
-        const content = document.getElementById('productManagerContent');
-        if (content) {
-            content.innerHTML = createProductManagerContent();
-        }
-    }
-}
-
-// Agregar nuevo producto
-function addNewProduct() {
-    const categoria = prompt('Categoría (salazones, fermentados, embutidos, fiambres, frescos, elaborados):');
-    if (!categoria || !window.productData[categoria]) {
-        alert('Categoría inválida');
-        return;
-    }
-    
-    const nombre = prompt('Nombre del producto:');
-    if (!nombre) return;
-    
-    const precio = prompt('Precio:');
-    if (!precio || isNaN(parseFloat(precio))) {
-        alert('Precio inválido');
-        return;
-    }
-    
-    const unidad = prompt('Unidad (kg, unidad, etc.):') || 'kg';
-    const presentacion = prompt('Presentación:') || '';
-    
-    const nuevoProducto = {
-        nombre: nombre,
-        precio: parseFloat(precio),
-        unidad: unidad,
-        presentacion: presentacion,
-        categoria: categoria
-    };
-    
-    window.productData[categoria].push(nuevoProducto);
-    saveProductData();
-    
-    // Recargar interfaz
-    const content = document.getElementById('productManagerContent');
-    if (content) {
-        content.innerHTML = createProductManagerContent();
-    }
-    
-    showSuccess(`Producto "${nombre}" agregado exitosamente`);
-}
-
-// Exponer funciones globalmente - COMPLETAR LISTA
 window.loadConfiguracion = loadConfiguracion;
 window.loadEstadisticas = loadEstadisticas;
 window.showAddVendedorForm = showAddVendedorForm;
@@ -972,5 +982,9 @@ window.updateProductPrice = updateProductPrice;
 window.updateProductUnit = updateProductUnit;
 window.updateProductPresentation = updateProductPresentation;
 window.deleteProduct = deleteProduct;
+window.loadSavedConfig = loadSavedConfig;
+window.saveProductData = saveProductData;
+window.showSuccess = showSuccess;
+window.showError = showError;
 
 console.log('Sistema de configuración cargado completamente');
